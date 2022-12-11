@@ -1,0 +1,1 @@
+﻿# Obfuscator for Harmony mods
