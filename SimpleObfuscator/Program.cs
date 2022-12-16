@@ -60,23 +60,38 @@ again:
 				return;
 			}
 
-			int i = 1;
+			//int i = 1;
 			foreach (var type in module.GetTypes())
 			{
 				var attr = type.CustomAttributes;
 				if (type.IsSpecialName || type.IsRuntimeSpecialName || type.IsGlobalModuleType || attr.Any(e => e.TypeFullName.Contains("CompilerGenerated")))
 					continue;
 
-				bool isDisposable = false;
+				// test code
+				//bool ahasInterfaces = false;
+				//var ainterfaces = type.Interfaces;
+				//if (ainterfaces.Count > 0) // dont rename interface methods (they are name dependent)
+				//	ahasInterfaces = true;
+				//if (!ahasInterfaces)
+				//	continue;
+
+				//Console.Write($"\n\n{ainterfaces[0].Interface.Name},,,,{type.Name} |||");
+				//ainterfaces[0].Interface.ResolveTypeDef()?.Methods?.ToList().ForEach(e => Console.WriteLine(e.Name));
+				//continue;
+
+				bool hasInterfaces = false;
 				var interfaces = type.Interfaces;
-				if (interfaces == null || interfaces.Count > 0)
-				{
-					foreach (var iface in interfaces)
-					{
-						if (iface.Interface.Name == "IDisposable")
-							isDisposable = true;
-					}
-				}
+				if (interfaces.Count > 0) // dont rename interface methods (they are name dependent)
+					hasInterfaces = true;
+
+				//if (interfaces == null || interfaces.Count > 0)
+				//{
+				//	foreach (var iface in interfaces)
+				//	{
+				//		if (iface.Interface.Name == "IDisposable")
+				//			hasInterfaces = true;
+				//	}
+				//}
 
 				string typename = GenRandomName();
 				string typenamespace = GenRandomName();
@@ -103,8 +118,20 @@ again:
 
 				foreach (var method in type.Methods)
 				{
-					if (isDisposable && method.Name == "Dispose")
-						continue;
+					bool isIfaceMethod = false;
+					if (hasInterfaces)
+					{
+						foreach (var iface in interfaces)
+						{
+							if (iface.Interface.ResolveTypeDef()?.Methods?.Any(m => m.Name == method.Name) is true)
+							{
+								isIfaceMethod = true;
+								break;
+							}
+						}
+					}
+					//if (hasInterfaces && method.Name == "Dispose")
+					//	continue;
 
 					if (method.IsRuntimeSpecialName || method.IsConstructor)
 						continue;
@@ -113,9 +140,12 @@ again:
 
 					if (!(method.Name == "OnLoaded" || method.Name == "OnUnloaded" || method.Name == "Transpiler" || method.Name == "Prefix" || method.Name == "Postfix" || method.Name == "Prepare" || method.Name == "Finalizer" || method.Name == "TargetMethod" || method.Name == "TargetMethods" || method.Name == "Cleanup"))
 					{
-						string methodname = GenRandomName();
-						preserved_data.Add((method.Name, methodname));
-						method.Name = methodname;
+						if (!isIfaceMethod)
+						{
+							string methodname = GenRandomName();
+							preserved_data.Add((method.Name, methodname));
+							method.Name = methodname;
+						}
 					}
 					else
 					{
