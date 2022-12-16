@@ -102,6 +102,9 @@ again:
 				preserved_data.Add((type.Namespace, typenamespace));
 				type.Namespace = typenamespace;
 
+				if (type.IsInterface)
+					continue; // skip method naming of interfaces
+
 				foreach (var field in type.Fields)
 				{
 					string fieldname = GenRandomName();
