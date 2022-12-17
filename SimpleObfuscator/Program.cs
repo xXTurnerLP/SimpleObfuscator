@@ -73,7 +73,7 @@ again:
 				//if (ainterfaces.Count > 0) // dont rename interface methods (they are name dependent)
 				//	ahasInterfaces = true;
 				//if (!ahasInterfaces)
-				//	continue;
+				//continue;
 
 				//Console.Write($"\n\n{ainterfaces[0].Interface.Name},,,,{type.Name} |||");
 				//ainterfaces[0].Interface.ResolveTypeDef()?.Methods?.ToList().ForEach(e => Console.WriteLine(e.Name));
@@ -93,6 +93,10 @@ again:
 				//	}
 				//}
 
+				bool serializable = false;
+				if (type.IsSerializable)
+					serializable = true;
+
 				string typename = GenRandomName();
 				string typenamespace = GenRandomName();
 
@@ -101,6 +105,9 @@ again:
 
 				preserved_data.Add((type.Namespace, typenamespace));
 				type.Namespace = typenamespace;
+
+				if (serializable)
+					goto skip_field_obfuscation;
 
 				if (type.IsInterface)
 					continue; // skip method naming of interfaces
@@ -119,6 +126,7 @@ again:
 					property.Name = propertyname;
 				}
 
+skip_field_obfuscation:
 				foreach (var method in type.Methods)
 				{
 					bool isIfaceMethod = false;
