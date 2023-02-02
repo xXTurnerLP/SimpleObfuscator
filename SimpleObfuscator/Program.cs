@@ -4,8 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using dnlib.DotNet;
 using dnlib.DotNet.Writer;
 
@@ -45,8 +43,13 @@ again:
 			if (args.Length == 0)
 			{
 				Console.WriteLine("Usage: simpleobfuscator.exe <target assembly> <strong-name key>");
+				Console.WriteLine("Usage: simpleobfuscator.exe --deobfuscate <target assembly> <preserved strings>");
+				Console.WriteLine("Make sure the the path does not contain spaces");
 				return;
 			}
+
+			if (args.Contains("--deobfuscate"))
+				goto deobfuscation;
 
 			string path = args[0];
 			string key = args[1];
@@ -66,6 +69,20 @@ again:
 				var attr = type.CustomAttributes;
 				if (type.IsSpecialName || type.IsRuntimeSpecialName || type.IsGlobalModuleType || attr.Any(e => e.TypeFullName.Contains("CompilerGenerated")))
 					continue;
+
+				//attr.ToList().ForEach(e => Console.WriteLine($"{e.AttributeType.Name}\n"));
+				//Console.WriteLine("\n");
+
+				bool excludeObfuscation_class = false;
+				if (attr.Any(e => e.AttributeType.Name == nameof(ObfuscationAttribute)))
+				{
+					excludeObfuscation_class = (bool)attr.First(e => e.AttributeType.Name == nameof(ObfuscationAttribute)).NamedArguments.First(e => e.Name == "Exclude").Value == true;
+				}
+
+				//if (attr.Any(e => e.AttributeType.Name == nameof(ObfuscationAttribute)))
+				//{
+				//	Console.WriteLine($"found: {attr.ToList().Select(e => e.AttributeType.Name).ToString()}");
+				//}
 
 				// test code
 				//bool ahasInterfaces = false;
@@ -97,11 +114,14 @@ again:
 				if (type.IsSerializable)
 					serializable = true;
 
-				string typename = GenRandomName();
-				string typenamespace = GenRandomName();
+				if (!excludeObfuscation_class)
+				{
+					string typename = GenRandomName();
+					preserved_data.Add((type.Name, typename));
+					type.Name = typename;
+				}
 
-				preserved_data.Add((type.Name, typename));
-				type.Name = typename;
+				string typenamespace = GenRandomName();
 
 				preserved_data.Add((type.Namespace, typenamespace));
 				type.Namespace = typenamespace;
@@ -114,6 +134,12 @@ again:
 
 				foreach (var field in type.Fields)
 				{
+					if (field.CustomAttributes.Any(e => e.AttributeType.Name == nameof(ObfuscationAttribute)))
+					{
+						if ((bool)field.CustomAttributes.First(e => e.AttributeType.Name == nameof(ObfuscationAttribute)).NamedArguments.First(e => e.Name == "Exclude").Value == true)
+							continue;
+					}
+
 					string fieldname = GenRandomName();
 					preserved_data.Add((field.Name, fieldname));
 					field.Name = fieldname;
@@ -121,6 +147,12 @@ again:
 
 				foreach (var property in type.Properties)
 				{
+					if (property.CustomAttributes.Any(e => e.AttributeType.Name == nameof(ObfuscationAttribute)))
+					{
+						if ((bool)property.CustomAttributes.First(e => e.AttributeType.Name == nameof(ObfuscationAttribute)).NamedArguments.First(e => e.Name == "Exclude").Value == true)
+							continue;
+					}
+
 					string propertyname = GenRandomName();
 					preserved_data.Add((property.Name, propertyname));
 					property.Name = propertyname;
@@ -144,6 +176,12 @@ skip_field_obfuscation:
 					//if (hasInterfaces && method.Name == "Dispose")
 					//	continue;
 
+					bool excludeObfuscation = false;
+					if (method.CustomAttributes.Any(e => e.AttributeType.Name == nameof(ObfuscationAttribute)))
+					{
+						excludeObfuscation = (bool)method.CustomAttributes.First(e => e.AttributeType.Name == nameof(ObfuscationAttribute)).NamedArguments.First(e => e.Name == "Exclude").Value == true;
+					}
+
 					if (method.IsRuntimeSpecialName || method.IsConstructor)
 						continue;
 
@@ -151,7 +189,7 @@ skip_field_obfuscation:
 
 					if (!(method.Name == "OnLoaded" || method.Name == "OnUnloaded" || method.Name == "Transpiler" || method.Name == "Prefix" || method.Name == "Postfix" || method.Name == "Prepare" || method.Name == "Finalizer" || method.Name == "TargetMethod" || method.Name == "TargetMethods" || method.Name == "Cleanup"))
 					{
-						if (!isIfaceMethod)
+						if (!isIfaceMethod && !excludeObfuscation)
 						{
 							string methodname = GenRandomName();
 							preserved_data.Add((method.Name, methodname));
@@ -166,6 +204,12 @@ skip_field_obfuscation:
 					if (!isHarmonyMethod)
 						foreach (var param in method.Parameters)
 						{
+							if (param.ParamDef.CustomAttributes.Any(e => e.AttributeType.Name == nameof(ObfuscationAttribute)))
+							{
+								if ((bool)param.ParamDef.CustomAttributes.First(e => e.AttributeType.Name == nameof(ObfuscationAttribute)).NamedArguments.First(e => e.Name == "Exclude").Value == true)
+									continue;
+							}
+
 							if (!(param.Name == "__instance" || param.Name == "__result" || param.Name == "__state" || param.Name == "___fields" || param.Name == "__args" || param.Name == "__originalMethod" || param.Name == "__runOriginal"))
 							{
 								string paramname = GenRandomName();
@@ -200,6 +244,22 @@ skip_field_obfuscation:
 			string newFilename = path.Replace($".{extension}", $".{extension}.obf");
 			module.Write(newFilename, opts);
 			Console.WriteLine("Done");
+			return;
+
+deobfuscation:
+			Console.WriteLine("Mode: Deobfuscation");
+
+			string path2 = args[0];
+			string key2 = args[1];
+
+			ModuleContext modCtx2 = ModuleDef.CreateModuleContext();
+			ModuleDefMD module2 = ModuleDefMD.Load(path2, modCtx2);
+
+			if (module2 == null)
+			{
+				Console.WriteLine("Cannot load module");
+				return;
+			}
 		}
 	}
 }
